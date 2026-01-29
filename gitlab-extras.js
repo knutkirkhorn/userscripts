@@ -90,7 +90,7 @@ searchObserver.observe(document.body, {
 // Initial setup (if already on this URL)
 setupSearchOnEnterPressed();
 
-// Add styles for MR/PR status
+// Add styles for MR/PR status and loader
 const style = document.createElement("style");
 style.textContent = `
 	.mr-draft {
@@ -101,8 +101,48 @@ style.textContent = `
 		background-color: #e3fcef !important;
 		border-left: 4px solid #108548 !important;
 	}
+	.gitlab-extras-loader-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background-color: rgba(0, 0, 0, 0.5);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 999999;
+	}
+	.gitlab-extras-loader-text {
+		background-color: white;
+		padding: 20px 40px;
+		border-radius: 8px;
+		font-size: 18px;
+		font-weight: bold;
+		color: #333;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	}
 `;
 document.head.appendChild(style);
+
+// Loader helper functions
+function showLoader() {
+	const overlay = document.createElement("div");
+	overlay.className = "gitlab-extras-loader-overlay";
+	overlay.id = "gitlab-extras-loader";
+	const text = document.createElement("div");
+	text.className = "gitlab-extras-loader-text";
+	text.textContent = "Loading...";
+	overlay.appendChild(text);
+	document.body.appendChild(overlay);
+}
+
+function hideLoader() {
+	const overlay = document.getElementById("gitlab-extras-loader");
+	if (overlay) {
+		overlay.remove();
+	}
+}
 
 // Function to update MR/PR styling
 function updateMRStyling() {
@@ -195,6 +235,9 @@ document.addEventListener("keydown", function (e) {
 		e.stopPropagation();
 		e.preventDefault();
 
+		// Show loader overlay
+		showLoader();
+
 		// Get project path and MR IID from the current URL
 		const urlParts = window.location.pathname.split("/");
 		// This consist of user/group + project/repo. Example "knutakir/knuts-gitlab-restroom"
@@ -241,11 +284,13 @@ document.addEventListener("keydown", function (e) {
 						"Error toggling draft status (data.errors):",
 						data.errors,
 					);
+					hideLoader();
 				} else if (data.data.errors) {
 					console.error(
 						"Error toggling draft status (data.data.errors):",
 						data.data.errors,
 					);
+					hideLoader();
 				} else {
 					// TODO: Is it possible to do this without refreshing?
 					// Refresh the page to show updated status
@@ -254,6 +299,7 @@ document.addEventListener("keydown", function (e) {
 			})
 			.catch((error) => {
 				console.error("Error toggling draft status:", error);
+				hideLoader();
 			});
 	}
 });
