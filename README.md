@@ -10,6 +10,6 @@ bun install
 
 ## Usage
 
-Copy the userscript to your browser's userscript extension (Examples: Greasemonkey and Violentmonkey).
+Copy the userscript from the `scripts` folder to your browser's userscript extension (Examples: Greasemonkey and Violentmonkey).
 
 Better import docs coming soon™
