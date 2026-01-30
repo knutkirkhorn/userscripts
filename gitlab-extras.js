@@ -7,38 +7,38 @@
 
 // Add SAML session expiration detection.
 // Refresh the page if the SAML modal is shown.
-const observer = new MutationObserver((mutations) => {
+const observer = new MutationObserver(() => {
 	// Finds the div that is not the outer modal div (does not contains id "___BV_modal_outer_")
 	const samlModal = document.querySelector(
 		"[id^='reload-saml-modal']:not([id$='___BV_modal_outer_'])",
 	);
-	console.log("debug: samlModal", samlModal);
+	console.log('debug: samlModal', samlModal);
 
 	if (samlModal) {
 		console.log(
-			"debug: if check: ",
+			'debug: if check:',
 			samlModal &&
-				samlModal.getAttribute("aria-label") ===
-					"Your SAML session has expired" &&
-				samlModal.classList.contains("show"),
+				samlModal.getAttribute('aria-label') ===
+					'Your SAML session has expired' &&
+				samlModal.classList.contains('show'),
 		);
 		console.log(
 			"debug: samlModal.getAttribute('aria-label')",
-			samlModal.getAttribute("aria-label"),
+			samlModal.getAttribute('aria-label'),
 		);
 		console.log(
 			"debug: samlModal.classList.contains('show')",
-			samlModal.classList.contains("show"),
+			samlModal.classList.contains('show'),
 		);
 	}
 
 	if (
 		samlModal &&
-		samlModal.getAttribute("aria-label") === "Your SAML session has expired" &&
-		samlModal.classList.contains("show")
+		samlModal.getAttribute('aria-label') === 'Your SAML session has expired' &&
+		samlModal.classList.contains('show')
 	) {
-		console.log("SAML session expired, refreshing page");
-		window.location.reload();
+		console.log('SAML session expired, refreshing page');
+		globalThis.location.reload();
 	}
 });
 
@@ -52,8 +52,8 @@ observer.observe(document.body, {
 function setupSearchOnEnterPressed() {
 	// Check if we're on merge requests or issues page
 	const isMergeRequestsPage =
-		window.location.pathname.includes("/-/merge_requests");
-	const isIssuesPage = window.location.pathname.includes("/-/issues");
+		globalThis.location.pathname.includes('/-/merge_requests');
+	const isIssuesPage = globalThis.location.pathname.includes('/-/issues');
 
 	if (!isMergeRequestsPage && !isIssuesPage) return;
 
@@ -62,9 +62,9 @@ function setupSearchOnEnterPressed() {
 	);
 	if (!searchInput) return;
 
-	searchInput.addEventListener("keydown", (e) => {
-		if (e.key === "Enter") {
-			e.preventDefault();
+	searchInput.addEventListener('keydown', event => {
+		if (event.key === 'Enter') {
+			event.preventDefault();
 			// Find and click the search button
 			const searchButton = document.querySelector(
 				'button[data-testid="search-button"]',
@@ -77,7 +77,7 @@ function setupSearchOnEnterPressed() {
 }
 
 // Create an observer for the search input
-const searchObserver = new MutationObserver((mutations) => {
+const searchObserver = new MutationObserver(() => {
 	setupSearchOnEnterPressed();
 });
 
@@ -91,7 +91,7 @@ searchObserver.observe(document.body, {
 setupSearchOnEnterPressed();
 
 // Add styles for MR/PR status and loader
-const style = document.createElement("style");
+const style = document.createElement('style');
 style.textContent = `
 	.mr-draft {
 		background-color: #f8f0e3 !important;
@@ -123,22 +123,22 @@ style.textContent = `
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
 `;
-document.head.appendChild(style);
+document.head.append(style);
 
 // Loader helper functions
 function showLoader() {
-	const overlay = document.createElement("div");
-	overlay.className = "gitlab-extras-loader-overlay";
-	overlay.id = "gitlab-extras-loader";
-	const text = document.createElement("div");
-	text.className = "gitlab-extras-loader-text";
-	text.textContent = "Loading...";
-	overlay.appendChild(text);
-	document.body.appendChild(overlay);
+	const overlay = document.createElement('div');
+	overlay.className = 'gitlab-extras-loader-overlay';
+	overlay.id = 'gitlab-extras-loader';
+	const text = document.createElement('div');
+	text.className = 'gitlab-extras-loader-text';
+	text.textContent = 'Loading...';
+	overlay.append(text);
+	document.body.append(overlay);
 }
 
 function hideLoader() {
-	const overlay = document.getElementById("gitlab-extras-loader");
+	const overlay = document.querySelector('#gitlab-extras-loader');
 	if (overlay) {
 		overlay.remove();
 	}
@@ -146,36 +146,36 @@ function hideLoader() {
 
 // Function to update MR/PR styling
 function updateMRStyling() {
-	const mrRows = document.querySelectorAll(".merge-request");
+	const mrRows = document.querySelectorAll('.merge-request');
 
-	mrRows.forEach((row) => {
+	for (const row of mrRows) {
 		// Remove existing custom classes
-		row.classList.remove("mr-draft", "mr-ready");
+		row.classList.remove('mr-draft', 'mr-ready');
 
 		// Check if MR is draft
 		const isDraft = row
-			.querySelector(".issue-title-text")
+			.querySelector('.issue-title-text')
 			.textContent.trim()
-			.startsWith("Draft: ");
+			.startsWith('Draft: ');
 
 		// Add class to MR row
 		if (isDraft) {
-			row.classList.add("mr-draft");
+			row.classList.add('mr-draft');
 		} else {
-			row.classList.add("mr-ready");
+			row.classList.add('mr-ready');
 		}
-	});
+	}
 }
 
 function isOnMergeRequestsPage() {
 	return (
-		window.location.pathname.endsWith("/-/merge_requests/") ||
-		window.location.pathname.endsWith("/-/merge_requests")
+		globalThis.location.pathname.endsWith('/-/merge_requests/') ||
+		globalThis.location.pathname.endsWith('/-/merge_requests')
 	);
 }
 
 // Create an observer for the MR list
-const mrObserver = new MutationObserver((mutations) => {
+const mrObserver = new MutationObserver(() => {
 	if (isOnMergeRequestsPage()) {
 		updateMRStyling();
 	}
@@ -192,22 +192,27 @@ if (isOnMergeRequestsPage()) {
 	updateMRStyling();
 }
 
-document.addEventListener("keydown", function (e) {
-	console.log("key down", e.key);
+document.addEventListener('keydown', event => {
+	console.log('key down', event.key);
 
 	// Ignore if typing in an input, textarea, or contenteditable
 	if (
-		e.target.tagName === "INPUT" ||
-		e.target.tagName === "TEXTAREA" ||
-		e.target.isContentEditable
+		event.target.tagName === 'INPUT' ||
+		event.target.tagName === 'TEXTAREA' ||
+		event.target.isContentEditable
 	) {
 		return;
 	}
 
 	// Approve PR using the "a" key (case-insensitive), and not a modifier key
-	if (e.key.toLowerCase() === "a" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-		e.stopPropagation();
-		e.preventDefault();
+	if (
+		event.key.toLowerCase() === 'a' &&
+		!event.ctrlKey &&
+		!event.metaKey &&
+		!event.altKey
+	) {
+		event.stopPropagation();
+		event.preventDefault();
 
 		// Find the "Approve" button
 		const approveButton = document.querySelector(
@@ -220,29 +225,34 @@ document.addEventListener("keydown", function (e) {
 	}
 
 	// Open the search bar using Ctrl/Cmd + K
-	if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-		e.stopPropagation();
-		e.preventDefault();
+	if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+		event.stopPropagation();
+		event.preventDefault();
 
-		const searchBar = document.querySelector("#super-sidebar-search");
+		const searchBar = document.querySelector('#super-sidebar-search');
 		if (searchBar) {
 			searchBar.click();
 		}
 	}
 
 	// Toggle the MR/PR as draft/ready using the "d" key (case-insensitive), and not a modifier key
-	if (e.key.toLowerCase() === "d" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-		e.stopPropagation();
-		e.preventDefault();
+	if (
+		event.key.toLowerCase() === 'd' &&
+		!event.ctrlKey &&
+		!event.metaKey &&
+		!event.altKey
+	) {
+		event.stopPropagation();
+		event.preventDefault();
 
 		// Show loader overlay
 		showLoader();
 
 		// Get project path and MR IID from the current URL
-		const urlParts = window.location.pathname.split("/");
+		const urlParts = globalThis.location.pathname.split('/');
 		// This consist of user/group + project/repo. Example "knutakir/knuts-gitlab-restroom"
-		const projectPath = urlParts.slice(1, -3).join("/");
-		const mergeRequestNumber = urlParts[urlParts.length - 1];
+		const projectPath = urlParts.slice(1, -3).join('/');
+		const mergeRequestNumber = urlParts.at(-1);
 
 		// Get the current draft status from the page.
 		// Currently just checks if the "Mark as ready" button is present.
@@ -254,51 +264,51 @@ document.addEventListener("keydown", function (e) {
 		// Get the CSRF token from the meta tag
 		const token = document
 			.querySelector('meta[name="csrf-token"]')
-			?.getAttribute("content");
+			?.getAttribute('content');
 
 		// TODO: make async?
-		fetch("https://gitlab.com/api/graphql", {
+		fetch('https://gitlab.com/api/graphql', {
 			headers: {
-				"Content-Type": "application/json",
-				"X-CSRF-Token": token,
+				'Content-Type': 'application/json',
+				'X-CSRF-Token': token,
 			},
 			body: JSON.stringify({
-				operationName: "toggleDraftStatus",
+				operationName: 'toggleDraftStatus',
 				variables: {
 					projectPath: projectPath,
 					iid: mergeRequestNumber,
 					draft: !isDraft,
 				},
 				query:
-					"mutation toggleDraftStatus($projectPath: ID!, $iid: String!, $draft: Boolean!) {  mergeRequestSetDraft(    input: {projectPath: $projectPath, iid: $iid, draft: $draft}  ) {    mergeRequest {      id      mergeableDiscussionsState      title      draft      __typename    }    errors    __typename  }}",
+					'mutation toggleDraftStatus($projectPath: ID!, $iid: String!, $draft: Boolean!) {  mergeRequestSetDraft(    input: {projectPath: $projectPath, iid: $iid, draft: $draft}  ) {    mergeRequest {      id      mergeableDiscussionsState      title      draft      __typename    }    errors    __typename  }}',
 			}),
-			method: "POST",
-			mode: "cors",
+			method: 'POST',
+			mode: 'cors',
 		})
-			.then((response) => response.json())
-			.then((data) => {
-				console.log("data", data);
+			.then(response => response.json())
+			.then(data => {
+				console.log('data', data);
 
 				if (data.errors) {
 					console.error(
-						"Error toggling draft status (data.errors):",
+						'Error toggling draft status (data.errors):',
 						data.errors,
 					);
 					hideLoader();
 				} else if (data.data.errors) {
 					console.error(
-						"Error toggling draft status (data.data.errors):",
+						'Error toggling draft status (data.data.errors):',
 						data.data.errors,
 					);
 					hideLoader();
 				} else {
 					// TODO: Is it possible to do this without refreshing?
 					// Refresh the page to show updated status
-					window.location.reload();
+					globalThis.location.reload();
 				}
 			})
-			.catch((error) => {
-				console.error("Error toggling draft status:", error);
+			.catch(error => {
+				console.error('Error toggling draft status:', error);
 				hideLoader();
 			});
 	}
