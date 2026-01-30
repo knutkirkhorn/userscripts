@@ -12,7 +12,7 @@ bun install
 
 ### One-click install
 
-Click on a script below to install it directly in your userscript manager (Greasemonkey, Violentmonkey, or Tampermonkey):
+Click on a script below to install it directly in your userscript manager (Greasemonkey or Violentmonkey):
 
 | Script                                                                                                       | Description                                                     |
 | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
