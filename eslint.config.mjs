@@ -10,7 +10,7 @@ export default defineConfig([
 	eslintConfigPrettier,
 	{
 		languageOptions: {
-			globals: {...globals.node},
+			globals: {...globals.browser},
 
 			ecmaVersion: 2025,
 			sourceType: 'module',
