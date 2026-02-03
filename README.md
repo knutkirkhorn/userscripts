@@ -2,12 +2,6 @@
 
 > Personal userscripts for better web browsing 🤠
 
-## Install
-
-```bash
-bun install
-```
-
 ## Usage
 
 ### One-click install
@@ -23,3 +17,11 @@ Click on a script below to install it directly in your userscript manager (Greas
 ### Manual install
 
 Copy the userscript from the [scripts](./scripts) folder to your browser's userscript extension.
+
+## Development
+
+Install dependencies for development. This is not required for using the scripts.
+
+```bash
+bun install
+```
