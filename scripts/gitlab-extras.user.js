@@ -126,13 +126,13 @@ style.textContent = `
 document.head.append(style);
 
 // Loader helper functions
-function showLoader() {
+function showLoader(message = 'Loading...') {
 	const overlay = document.createElement('div');
 	overlay.className = 'gitlab-extras-loader-overlay';
 	overlay.id = 'gitlab-extras-loader';
 	const text = document.createElement('div');
 	text.className = 'gitlab-extras-loader-text';
-	text.textContent = 'Loading...';
+	text.textContent = message;
 	overlay.append(text);
 	document.body.append(overlay);
 }
@@ -245,9 +245,6 @@ document.addEventListener('keydown', event => {
 		event.stopPropagation();
 		event.preventDefault();
 
-		// Show loader overlay
-		showLoader();
-
 		// Get project path and MR IID from the current URL
 		const urlParts = globalThis.location.pathname.split('/');
 		// This consist of user/group + project/repo. Example "knutakir/knuts-gitlab-restroom"
@@ -260,6 +257,9 @@ document.addEventListener('keydown', event => {
 		const isDraft =
 			document.querySelector('button[data-testid="mark-as-ready-button"]') !==
 			null;
+
+		// Show loader overlay with context-specific text
+		showLoader(isDraft ? 'Marking as ready...' : 'Marking as draft...');
 
 		// Get the CSRF token from the meta tag
 		const token = document
