@@ -17,7 +17,7 @@
 	 * Add style used for highlighting matching day headers
 	 */
 	function injectHighlightStyles() {
-		if (document.getElementById('cu-us-target-total-style')) {
+		if (document.querySelector('#cu-us-target-total-style')) {
 			return;
 		}
 
@@ -38,7 +38,7 @@
 			}
 		`;
 
-		document.head.appendChild(style);
+		document.head.append(style);
 	}
 
 	/**
@@ -49,11 +49,11 @@
 			'.time-hub-task-table-header-cell__total-time-tracked[data-test^="daily-summary-"]',
 		)) {
 			// Ignore the total column that uses no date
-			if (total.getAttribute('data-test') === 'daily-summary-no-date') {
+			if (total.dataset.test === 'daily-summary-no-date') {
 				continue;
 			}
 
-			const totalText = total.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+			const totalText = total.textContent?.replaceAll(/\s+/g, ' ').trim() ?? '';
 			const headerCell = total.closest('.time-hub-task-table-header-cell');
 			if (!headerCell) {
 				continue;
