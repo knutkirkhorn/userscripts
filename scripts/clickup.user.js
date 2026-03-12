@@ -10,6 +10,62 @@
 // ==/UserScript==
 
 (function () {
+	const TARGET_DAILY_TOTAL = '7h 30m';
+	const HIGHLIGHT_CLASS = 'cu-us-day-target-total';
+
+	/**
+	 * Add style used for highlighting matching day headers
+	 */
+	function injectHighlightStyles() {
+		if (document.getElementById('cu-us-target-total-style')) {
+			return;
+		}
+
+		const style = document.createElement('style');
+		style.id = 'cu-us-target-total-style';
+		style.textContent = `
+			.time-hub-task-table-header-cell.${HIGHLIGHT_CLASS},
+			.time-hub-task-table-header-cell.${HIGHLIGHT_CLASS}:hover {
+				background-color: #d7f5dc !important;
+				border-radius: 8px;
+			}
+
+			.time-hub-task-table-header-cell.${HIGHLIGHT_CLASS} .time-hub-task-table-header-cell__title,
+			.time-hub-task-table-header-cell.${HIGHLIGHT_CLASS} .time-hub-task-table-header-cell__total-time-tracked,
+			.time-hub-task-table-header-cell.${HIGHLIGHT_CLASS}:hover .time-hub-task-table-header-cell__title,
+			.time-hub-task-table-header-cell.${HIGHLIGHT_CLASS}:hover .time-hub-task-table-header-cell__total-time-tracked {
+				color: #166534 !important;
+			}
+		`;
+
+		document.head.appendChild(style);
+	}
+
+	/**
+	 * Highlight day header cells matching the target daily total
+	 */
+	function updateDayHeaderHighlights() {
+		for (const total of document.querySelectorAll(
+			'.time-hub-task-table-header-cell__total-time-tracked[data-test^="daily-summary-"]',
+		)) {
+			// Ignore the total column that uses no date
+			if (total.getAttribute('data-test') === 'daily-summary-no-date') {
+				continue;
+			}
+
+			const totalText = total.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+			const headerCell = total.closest('.time-hub-task-table-header-cell');
+			if (!headerCell) {
+				continue;
+			}
+
+			headerCell.classList.toggle(
+				HIGHLIGHT_CLASS,
+				totalText === TARGET_DAILY_TOTAL,
+			);
+		}
+	}
+
 	/**
 	 * Replace comma with period in an input element
 	 * @param {Event} event - The input event
@@ -78,6 +134,8 @@
 				attachListener(input);
 			}
 		}
+
+		updateDayHeaderHighlights();
 	}
 
 	/**
@@ -98,6 +156,17 @@
 							if (isTimeInputField(input)) {
 								attachListener(input);
 							}
+						}
+
+						if (
+							node.matches?.(
+								'.time-hub-task-table-header-cell, .time-hub-task-table-header-cell__total-time-tracked',
+							) ||
+							node.querySelector?.(
+								'.time-hub-task-table-header-cell, .time-hub-task-table-header-cell__total-time-tracked',
+							)
+						) {
+							updateDayHeaderHighlights();
 						}
 					}
 				}
@@ -127,11 +196,13 @@
 	// Initialize when DOM is ready
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', () => {
+			injectHighlightStyles();
 			processExistingInputs();
 			observeDOM();
 			setupGlobalHandler();
 		});
 	} else {
+		injectHighlightStyles();
 		processExistingInputs();
 		observeDOM();
 		setupGlobalHandler();
