@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         ClickUp Timesheet Comma to Period
 // @namespace    https://kiona.clickup.com
-// @version      1.0
-// @description  Automatically replaces commas with periods in time input fields on ClickUp timesheet
+// @version      1.1
+// @description  Comma to period in time inputs, day total highlights, and arrow keys for week nav on timesheet
 // @author       You
 // @match        https://kiona.clickup.com/*/time*
 // @match        https://*.clickup.com/*/time*
@@ -193,6 +193,61 @@
 		);
 	}
 
+	function isEditableTarget(element) {
+		if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+			return false;
+		}
+
+		const tag = element.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+			return true;
+		}
+
+		if (element.isContentEditable) {
+			return true;
+		}
+
+		return Boolean(element.closest('[contenteditable="true"]'));
+	}
+
+	/**
+	 * Left/right arrow keys trigger the same week navigation as the toolbar chevrons
+	 */
+	function setupWeekArrowShortcuts() {
+		document.addEventListener(
+			'keydown',
+			event => {
+				if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+					return;
+				}
+
+				if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+					return;
+				}
+
+				if (isEditableTarget(event.target)) {
+					return;
+				}
+
+				const label =
+					event.key === 'ArrowLeft' ? 'Previous week' : 'Next week';
+				const nav = document.querySelector('cu-time-hub-date-navigation');
+				const button =
+					nav?.querySelector(`button[aria-label="${label}"]`) ??
+					document.querySelector(`button[aria-label="${label}"]`);
+
+				if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') {
+					return;
+				}
+
+				event.preventDefault();
+				event.stopPropagation();
+				button.click();
+			},
+			true,
+		);
+	}
+
 	// Initialize when DOM is ready
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', () => {
@@ -200,12 +255,14 @@
 			processExistingInputs();
 			observeDOM();
 			setupGlobalHandler();
+			setupWeekArrowShortcuts();
 		});
 	} else {
 		injectHighlightStyles();
 		processExistingInputs();
 		observeDOM();
 		setupGlobalHandler();
+		setupWeekArrowShortcuts();
 	}
 
 	console.log('ClickUp Comma to Period script loaded');
