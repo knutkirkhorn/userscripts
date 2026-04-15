@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ClickUp Timesheet Comma to Period
 // @namespace    https://kiona.clickup.com
-// @version      1.1
+// @version      1.2
 // @description  Comma to period in time inputs, day total highlights, and arrow keys for week nav on timesheet
 // @author       You
 // @match        https://kiona.clickup.com/*/time*
@@ -12,6 +12,38 @@
 (function () {
 	const TARGET_DAILY_TOTAL = '7h 30m';
 	const HIGHLIGHT_CLASS = 'cu-us-day-target-total';
+	const TIME_TABLE_SELECTOR = '.time-hub-task-table';
+
+	let highlightRafId = 0;
+
+	function nodeInTimeTable(node) {
+		if (!node) {
+			return false;
+		}
+
+		const element =
+			node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+		return Boolean(element?.closest?.(TIME_TABLE_SELECTOR));
+	}
+
+	function mutationMayAffectDayTotals(mutation) {
+		if (mutation.type === 'characterData' || mutation.type === 'childList') {
+			return nodeInTimeTable(mutation.target);
+		}
+
+		return false;
+	}
+
+	function scheduleDayHeaderHighlights() {
+		if (highlightRafId) {
+			return;
+		}
+
+		highlightRafId = requestAnimationFrame(() => {
+			highlightRafId = 0;
+			updateDayHeaderHighlights();
+		});
+	}
 
 	/**
 	 * Add style used for highlighting matching day headers
@@ -144,6 +176,10 @@
 	function observeDOM() {
 		const observer = new MutationObserver(mutations => {
 			for (const mutation of mutations) {
+				if (mutationMayAffectDayTotals(mutation)) {
+					scheduleDayHeaderHighlights();
+				}
+
 				for (const node of mutation.addedNodes) {
 					if (node.nodeType === Node.ELEMENT_NODE) {
 						// Check if the added node is an input
@@ -157,17 +193,6 @@
 								attachListener(input);
 							}
 						}
-
-						if (
-							node.matches?.(
-								'.time-hub-task-table-header-cell, .time-hub-task-table-header-cell__total-time-tracked',
-							) ||
-							node.querySelector?.(
-								'.time-hub-task-table-header-cell, .time-hub-task-table-header-cell__total-time-tracked',
-							)
-						) {
-							updateDayHeaderHighlights();
-						}
 					}
 				}
 			}
@@ -175,6 +200,7 @@
 
 		observer.observe(document.body, {
 			childList: true,
+			characterData: true,
 			subtree: true,
 		});
 	}
@@ -187,6 +213,9 @@
 			event => {
 				if (event.target.tagName === 'INPUT') {
 					replaceCommaWithPeriod(event);
+					if (isTimeInputField(event.target)) {
+						scheduleDayHeaderHighlights();
+					}
 				}
 			},
 			true,
@@ -221,7 +250,12 @@
 					return;
 				}
 
-				if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+				if (
+					event.defaultPrevented ||
+					event.altKey ||
+					event.ctrlKey ||
+					event.metaKey
+				) {
 					return;
 				}
 
@@ -229,14 +263,17 @@
 					return;
 				}
 
-				const label =
-					event.key === 'ArrowLeft' ? 'Previous week' : 'Next week';
+				const label = event.key === 'ArrowLeft' ? 'Previous week' : 'Next week';
 				const nav = document.querySelector('cu-time-hub-date-navigation');
 				const button =
 					nav?.querySelector(`button[aria-label="${label}"]`) ??
 					document.querySelector(`button[aria-label="${label}"]`);
 
-				if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') {
+				if (
+					!button ||
+					button.disabled ||
+					button.getAttribute('aria-disabled') === 'true'
+				) {
 					return;
 				}
 
