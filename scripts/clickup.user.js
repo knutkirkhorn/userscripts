@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         ClickUp Timesheet Comma to Period
 // @namespace    https://kiona.clickup.com
-// @version      1.2
-// @description  Comma to period in time inputs, day total highlights, and arrow keys for week nav on timesheet
+// @version      1.3
+// @description  Comma to period in time inputs, day total highlights, arrow keys for week nav, and right-click task menu on timesheet
 // @author       You
 // @match        https://kiona.clickup.com/*/time*
 // @match        https://*.clickup.com/*/time*
@@ -13,6 +13,9 @@
 	const TARGET_DAILY_TOTAL = '7h 30m';
 	const HIGHLIGHT_CLASS = 'cu-us-day-target-total';
 	const TIME_TABLE_SELECTOR = '.time-hub-task-table';
+	const TASK_ROW_SELECTOR = 'tr[data-task-id]';
+	const CONTEXT_MENU_ID = 'cu-us-task-context-menu';
+	const CONTEXT_MENU_STYLE_ID = 'cu-us-task-context-menu-style';
 
 	let highlightRafId = 0;
 
@@ -285,22 +288,242 @@
 		);
 	}
 
+	function injectContextMenuStyles() {
+		if (document.querySelector(`#${CONTEXT_MENU_STYLE_ID}`)) {
+			return;
+		}
+
+		const style = document.createElement('style');
+		style.id = CONTEXT_MENU_STYLE_ID;
+		style.textContent = `
+			#${CONTEXT_MENU_ID} {
+				position: fixed;
+				z-index: 2147483647;
+				min-width: 180px;
+				padding: 4px;
+				background-color: #ffffff;
+				border: 1px solid rgba(0, 0, 0, 0.08);
+				border-radius: 8px;
+				box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+				font-size: 13px;
+				color: #2b2b2b;
+				user-select: none;
+			}
+
+			#${CONTEXT_MENU_ID} button {
+				display: block;
+				width: 100%;
+				padding: 8px 12px;
+				background: transparent;
+				border: none;
+				border-radius: 6px;
+				text-align: left;
+				font: inherit;
+				color: inherit;
+				cursor: pointer;
+			}
+
+			#${CONTEXT_MENU_ID} button:hover,
+			#${CONTEXT_MENU_ID} button:focus {
+				background-color: #f1f4f7;
+				outline: none;
+			}
+
+			#${CONTEXT_MENU_ID} button[disabled] {
+				color: #9aa2ad;
+				cursor: not-allowed;
+			}
+		`;
+
+		document.head.append(style);
+	}
+
+	function removeContextMenu() {
+		const existing = document.querySelector(`#${CONTEXT_MENU_ID}`);
+		if (existing) {
+			existing.remove();
+		}
+	}
+
+	/**
+	 * Find the task row that was right-clicked. Task rows in the ClickUp
+	 * timesheet are `<tr data-task-id="...">` elements inside the time table.
+	 * @param {EventTarget | null} target
+	 * @returns {HTMLElement | null}
+	 */
+	function findTaskRow(target) {
+		if (!(target instanceof Element)) {
+			// eslint-disable-next-line unicorn/no-null
+			return null;
+		}
+
+		const row = target.closest(TASK_ROW_SELECTOR);
+		if (row instanceof HTMLElement && row.closest(TIME_TABLE_SELECTOR)) {
+			return row;
+		}
+
+		// eslint-disable-next-line unicorn/no-null
+		return null;
+	}
+
+	/**
+	 * Extract the task id from a task row using its `data-task-id` attribute.
+	 * @param {HTMLElement | null | undefined} row
+	 * @returns {string}
+	 */
+	function getTaskIdFromRow(row) {
+		return row?.dataset?.taskId ?? '';
+	}
+
+	async function copyTextToClipboard(text) {
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(text);
+				return true;
+			}
+		} catch {
+			// Fall through to legacy fallback
+		}
+
+		const textarea = document.createElement('textarea');
+		textarea.value = text;
+		textarea.setAttribute('readonly', '');
+		textarea.style.position = 'fixed';
+		textarea.style.top = '-1000px';
+		textarea.style.opacity = '0';
+		document.body.append(textarea);
+		textarea.select();
+
+		let success = false;
+		try {
+			success = document.execCommand('copy');
+		} catch {
+			success = false;
+		}
+
+		textarea.remove();
+		return success;
+	}
+
+	/**
+	 * Show a custom context menu anchored at the given client coordinates
+	 * @param {number} clientX
+	 * @param {number} clientY
+	 * @param {{label: string, onSelect: () => void, disabled?: boolean}[]} items
+	 */
+	function showContextMenu(clientX, clientY, items) {
+		removeContextMenu();
+
+		const menu = document.createElement('div');
+		menu.id = CONTEXT_MENU_ID;
+		menu.setAttribute('role', 'menu');
+
+		for (const item of items) {
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.textContent = item.label;
+			button.setAttribute('role', 'menuitem');
+			if (item.disabled) {
+				button.disabled = true;
+			} else {
+				button.addEventListener('click', () => {
+					removeContextMenu();
+					item.onSelect();
+				});
+			}
+
+			menu.append(button);
+		}
+
+		// Position off-screen first so we can measure, then clamp to viewport
+		menu.style.left = '0px';
+		menu.style.top = '0px';
+		menu.style.visibility = 'hidden';
+		document.body.append(menu);
+
+		const {offsetWidth: width, offsetHeight: height} = menu;
+		const maxX = window.innerWidth - width - 4;
+		const maxY = window.innerHeight - height - 4;
+		menu.style.left = `${Math.max(4, Math.min(clientX, maxX))}px`;
+		menu.style.top = `${Math.max(4, Math.min(clientY, maxY))}px`;
+		menu.style.visibility = 'visible';
+	}
+
+	function setupTaskRowContextMenu() {
+		document.addEventListener(
+			'contextmenu',
+			event => {
+				const row = findTaskRow(event.target);
+				if (!row) {
+					return;
+				}
+
+				const taskId = getTaskIdFromRow(row);
+
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+
+				showContextMenu(event.clientX, event.clientY, [
+					{
+						label: taskId ? `Copy task ID (${taskId})` : 'Copy task ID',
+						disabled: !taskId,
+						onSelect: () => {
+							if (taskId) {
+								copyTextToClipboard(taskId);
+							}
+						},
+					},
+				]);
+			},
+			true,
+		);
+
+		const dismiss = event => {
+			const menu = document.querySelector(`#${CONTEXT_MENU_ID}`);
+			if (!menu) {
+				return;
+			}
+
+			if (event.type === 'keydown' && event.key !== 'Escape') {
+				return;
+			}
+
+			if (event.type === 'mousedown' && menu.contains(event.target)) {
+				return;
+			}
+
+			removeContextMenu();
+		};
+
+		document.addEventListener('mousedown', dismiss, true);
+		document.addEventListener('keydown', dismiss, true);
+		document.addEventListener('scroll', removeContextMenu, true);
+		window.addEventListener('blur', removeContextMenu);
+		window.addEventListener('resize', removeContextMenu);
+	}
+
 	// Initialize when DOM is ready
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', () => {
 			injectHighlightStyles();
+			injectContextMenuStyles();
 			processExistingInputs();
 			observeDOM();
 			setupGlobalHandler();
 			setupWeekArrowShortcuts();
+			setupTaskRowContextMenu();
 		});
 	} else {
 		injectHighlightStyles();
+		injectContextMenuStyles();
 		processExistingInputs();
 		observeDOM();
 		setupGlobalHandler();
 		setupWeekArrowShortcuts();
+		setupTaskRowContextMenu();
 	}
 
-	console.log('ClickUp Comma to Period script loaded');
+	console.log('ClickUp Timesheet userscript loaded (v1.3)');
 })();
