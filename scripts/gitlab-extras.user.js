@@ -122,6 +122,54 @@ style.textContent = `
 		color: #333;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	}
+	.gitlab-extras-mr-branch {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		margin-left: 4px;
+		color: var(--gray-700, #535158);
+		white-space: nowrap;
+	}
+	.gitlab-extras-mr-branch-name {
+		display: inline-block;
+		max-width: 260px;
+		overflow: hidden;
+		padding: 0 6px;
+		border: 1px solid var(--blue-200, #9dc7f1);
+		border-radius: 4px;
+		background-color: var(--blue-50, #eef6fc);
+		color: var(--blue-900, #0b5cad);
+		font-family: var(--default-monospace-font, monospace);
+		font-size: 12px;
+		line-height: 19px;
+		text-overflow: ellipsis;
+		vertical-align: middle;
+	}
+	.gitlab-extras-copy-branch {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border: 1px solid transparent;
+		border-radius: 4px;
+		background: transparent;
+		color: var(--gray-600, #626168);
+		cursor: pointer;
+		padding: 0;
+		vertical-align: middle;
+	}
+	.gitlab-extras-copy-branch svg {
+		display: block;
+	}
+	.gitlab-extras-copy-branch:hover {
+		border-color: var(--gray-200, #dcdcde);
+		background-color: var(--gray-100, #ececef);
+	}
+	.gitlab-extras-copy-branch-copied {
+		color: var(--green-600, #108548);
+		background-color: var(--green-50, #ecf4ee);
+	}
 `;
 document.head.append(style);
 
@@ -167,6 +215,195 @@ function updateMRStyling() {
 	}
 }
 
+const branchNamesByIid = new Map();
+const pendingBranchIids = new Set();
+let branchFetchTimeout;
+
+function getProjectPathFromUrl() {
+	const pathParts = globalThis.location.pathname.split('/-/');
+	return pathParts[0].slice(1);
+}
+
+function getMergeRequestIid(row) {
+	const mergeRequestLink = row.querySelector('a[href*="/-/merge_requests/"]');
+	const match = mergeRequestLink?.href.match(/\/-\/merge_requests\/(\d+)/);
+	return match?.[1];
+}
+
+function createSvgElement(name, attributes) {
+	const element = document.createElementNS('http://www.w3.org/2000/svg', name);
+
+	for (const [attribute, value] of Object.entries(attributes)) {
+		element.setAttribute(attribute, value);
+	}
+
+	return element;
+}
+
+function createCopyIcon() {
+	const svg = createSvgElement('svg', {
+		'aria-hidden': 'true',
+		fill: 'currentColor',
+		height: '14',
+		viewBox: '0 0 16 16',
+		width: '14',
+	});
+	const backPath = createSvgElement('path', {
+		d: 'M0 6.75C0 5.78.78 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z',
+	});
+	const frontPath = createSvgElement('path', {
+		d: 'M5 1.75C5 .78 5.78 0 6.75 0h7.5C15.22 0 16 .78 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z',
+	});
+
+	svg.append(backPath, frontPath);
+	return svg;
+}
+
+function createCopiedIcon() {
+	const svg = createSvgElement('svg', {
+		'aria-hidden': 'true',
+		fill: 'currentColor',
+		height: '14',
+		viewBox: '0 0 16 16',
+		width: '14',
+	});
+	const path = createSvgElement('path', {
+		d: 'M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z',
+	});
+
+	svg.append(path);
+	return svg;
+}
+
+function createBranchElement(branchName) {
+	const wrapper = document.createElement('span');
+	wrapper.className = 'gitlab-extras-mr-branch';
+
+	const branchText = document.createElement('span');
+	branchText.className = 'gitlab-extras-mr-branch-name';
+	branchText.textContent = branchName;
+
+	const copyButton = document.createElement('button');
+	copyButton.className = 'gitlab-extras-copy-branch';
+	copyButton.type = 'button';
+	copyButton.title = `Copy branch name: ${branchName}`;
+	copyButton.setAttribute('aria-label', `Copy branch name ${branchName}`);
+	copyButton.append(createCopyIcon());
+	copyButton.addEventListener('click', async event => {
+		event.preventDefault();
+		event.stopPropagation();
+
+		await navigator.clipboard.writeText(branchName);
+		copyButton.classList.add('gitlab-extras-copy-branch-copied');
+		copyButton.title = `Copied branch name: ${branchName}`;
+		copyButton.setAttribute('aria-label', `Copied branch name ${branchName}`);
+		copyButton.replaceChildren(createCopiedIcon());
+		setTimeout(() => {
+			copyButton.classList.remove('gitlab-extras-copy-branch-copied');
+			copyButton.title = `Copy branch name: ${branchName}`;
+			copyButton.setAttribute('aria-label', `Copy branch name ${branchName}`);
+			copyButton.replaceChildren(createCopyIcon());
+		}, 1500);
+	});
+
+	wrapper.append('· ', branchText, copyButton);
+	return wrapper;
+}
+
+function addBranchElementToRow(row, branchName) {
+	if (row.querySelector('.gitlab-extras-mr-branch')) return;
+
+	const titleElement = row.querySelector('.issue-title-text');
+	const infoLines = [...row.querySelectorAll('.issuable-info')];
+	const metadataLine =
+		infoLines.find(infoLine => !infoLine.contains(titleElement)) ??
+		titleElement?.closest('.issuable-info');
+
+	if (!metadataLine) return;
+
+	const branchElement = createBranchElement(branchName);
+	const authorLink = metadataLine.querySelector(
+		'a.author-link, a[data-testid="author-link"]',
+	);
+
+	if (authorLink) {
+		authorLink.after(' ', branchElement);
+		return;
+	}
+
+	metadataLine.append(' ', branchElement);
+}
+
+function renderMergeRequestBranches() {
+	const mergeRequestRows = document.querySelectorAll('.merge-request');
+
+	for (const row of mergeRequestRows) {
+		const mergeRequestIid = getMergeRequestIid(row);
+		if (!mergeRequestIid) continue;
+
+		const branchName = branchNamesByIid.get(mergeRequestIid);
+		if (branchName) {
+			addBranchElementToRow(row, branchName);
+			continue;
+		}
+
+		pendingBranchIids.add(mergeRequestIid);
+	}
+}
+
+async function fetchPendingBranchNames() {
+	if (pendingBranchIids.size === 0) return;
+
+	const iids = [...pendingBranchIids];
+	pendingBranchIids.clear();
+
+	const token = document
+		.querySelector('meta[name="csrf-token"]')
+		?.getAttribute('content');
+
+	const response = await fetch('https://gitlab.com/api/graphql', {
+		headers: {
+			'Content-Type': 'application/json',
+			...(token ? {'X-CSRF-Token': token} : {}),
+		},
+		body: JSON.stringify({
+			operationName: 'getMergeRequestBranches',
+			variables: {
+				projectPath: getProjectPathFromUrl(),
+				iids,
+			},
+			query:
+				'query getMergeRequestBranches($projectPath: ID!, $iids: [String!]) { project(fullPath: $projectPath) { mergeRequests(iids: $iids) { nodes { iid sourceBranch } } } }',
+		}),
+		method: 'POST',
+		mode: 'cors',
+	});
+
+	const data = await response.json();
+	const mergeRequests = data.data?.project?.mergeRequests?.nodes ?? [];
+
+	for (const mergeRequest of mergeRequests) {
+		branchNamesByIid.set(mergeRequest.iid, mergeRequest.sourceBranch);
+	}
+
+	renderMergeRequestBranches();
+}
+
+function scheduleBranchNameFetch() {
+	clearTimeout(branchFetchTimeout);
+	branchFetchTimeout = setTimeout(() => {
+		fetchPendingBranchNames().catch(error => {
+			console.error('Error fetching branch names:', error);
+		});
+	}, 100);
+}
+
+function updateMergeRequestList() {
+	updateMRStyling();
+	renderMergeRequestBranches();
+	scheduleBranchNameFetch();
+}
+
 function isOnMergeRequestsPage() {
 	return (
 		globalThis.location.pathname.endsWith('/-/merge_requests/') ||
@@ -177,7 +414,7 @@ function isOnMergeRequestsPage() {
 // Create an observer for the MR list
 const mrObserver = new MutationObserver(() => {
 	if (isOnMergeRequestsPage()) {
-		updateMRStyling();
+		updateMergeRequestList();
 	}
 });
 
@@ -189,7 +426,7 @@ mrObserver.observe(document.body, {
 
 // Initial styling
 if (isOnMergeRequestsPage()) {
-	updateMRStyling();
+	updateMergeRequestList();
 }
 
 document.addEventListener('keydown', event => {
