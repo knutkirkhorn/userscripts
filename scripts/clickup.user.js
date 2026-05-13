@@ -12,10 +12,12 @@
 (function () {
 	const TARGET_DAILY_TOTAL = '7h 30m';
 	const HIGHLIGHT_CLASS = 'cu-us-day-target-total';
+	const OVER_LIMIT_CLASS = 'cu-us-day-over-limit';
 	const TIME_TABLE_SELECTOR = '.time-hub-task-table';
 	const TASK_ROW_SELECTOR = 'tr[data-task-id]';
 	const CONTEXT_MENU_ID = 'cu-us-task-context-menu';
 	const CONTEXT_MENU_STYLE_ID = 'cu-us-task-context-menu-style';
+	const TARGET_DAILY_TOTAL_MINUTES = parseTimeTextToMinutes(TARGET_DAILY_TOTAL);
 
 	let highlightRafId = 0;
 
@@ -71,9 +73,32 @@
 			.time-hub-task-table-header-cell.${HIGHLIGHT_CLASS}:hover .time-hub-task-table-header-cell__total-time-tracked {
 				color: #166534 !important;
 			}
+
+			.time-hub-task-table-header-cell.${OVER_LIMIT_CLASS},
+			.time-hub-task-table-header-cell.${OVER_LIMIT_CLASS}:hover {
+				background-color: #fee2e2 !important;
+				border-radius: 8px;
+			}
+
+			.time-hub-task-table-header-cell.${OVER_LIMIT_CLASS} .time-hub-task-table-header-cell__title,
+			.time-hub-task-table-header-cell.${OVER_LIMIT_CLASS} .time-hub-task-table-header-cell__total-time-tracked,
+			.time-hub-task-table-header-cell.${OVER_LIMIT_CLASS}:hover .time-hub-task-table-header-cell__title,
+			.time-hub-task-table-header-cell.${OVER_LIMIT_CLASS}:hover .time-hub-task-table-header-cell__total-time-tracked {
+				color: #991b1b !important;
+			}
 		`;
 
 		document.head.append(style);
+	}
+
+	function parseTimeTextToMinutes(timeText) {
+		let minutes = 0;
+		for (const match of timeText.matchAll(/(\d+)\s*([hm])/gi)) {
+			const value = Number.parseInt(match[1], 10);
+			minutes += match[2].toLowerCase() === 'h' ? value * 60 : value;
+		}
+
+		return minutes;
 	}
 
 	/**
@@ -94,10 +119,9 @@
 				continue;
 			}
 
-			headerCell.classList.toggle(
-				HIGHLIGHT_CLASS,
-				totalText === TARGET_DAILY_TOTAL,
-			);
+			const totalMinutes = parseTimeTextToMinutes(totalText);
+			headerCell.classList.toggle(HIGHLIGHT_CLASS, totalMinutes === TARGET_DAILY_TOTAL_MINUTES);
+			headerCell.classList.toggle(OVER_LIMIT_CLASS, totalMinutes > TARGET_DAILY_TOTAL_MINUTES);
 		}
 	}
 
