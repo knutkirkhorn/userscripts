@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         ClickUp Timesheet Comma to Period
 // @namespace    https://kiona.clickup.com
-// @version      1.3
-// @description  Comma to period in time inputs, day total highlights, arrow keys for week nav, and right-click task menu on timesheet
+// @version      1.4
+// @description  Comma to period in time inputs, week numbers, day total highlights, arrow keys for week nav, and right-click task menu on timesheet
 // @author       You
 // @match        https://kiona.clickup.com/*/time*
 // @match        https://*.clickup.com/*/time*
@@ -17,9 +17,11 @@
 	const TASK_ROW_SELECTOR = 'tr[data-task-id]';
 	const CONTEXT_MENU_ID = 'cu-us-task-context-menu';
 	const CONTEXT_MENU_STYLE_ID = 'cu-us-task-context-menu-style';
+	const WEEK_NUMBER_ID = 'cu-us-week-number';
 	const TARGET_DAILY_TOTAL_MINUTES = parseTimeTextToMinutes(TARGET_DAILY_TOTAL);
 
 	let highlightRafId = 0;
+	let weekNumberRafId = 0;
 
 	function nodeInTimeTable(node) {
 		if (!node) {
@@ -39,6 +41,14 @@
 		return false;
 	}
 
+	function mutationMayAffectWeekNumber(mutation) {
+		const target =
+			mutation.target.nodeType === Node.ELEMENT_NODE
+				? mutation.target
+				: mutation.target.parentElement;
+		return Boolean(target?.closest?.('.time-hub-toolbar'));
+	}
+
 	function scheduleDayHeaderHighlights() {
 		if (highlightRafId) {
 			return;
@@ -48,6 +58,121 @@
 			highlightRafId = 0;
 			updateDayHeaderHighlights();
 		});
+	}
+
+	function scheduleWeekNumber() {
+		if (weekNumberRafId) {
+			return;
+		}
+
+		weekNumberRafId = requestAnimationFrame(() => {
+			weekNumberRafId = 0;
+			updateWeekNumber();
+		});
+	}
+
+	function parseClickUpDate(dateText) {
+		const isoDateMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateText);
+		if (isoDateMatch) {
+			return new Date(
+				Date.UTC(
+					Number.parseInt(isoDateMatch[1], 10),
+					Number.parseInt(isoDateMatch[2], 10) - 1,
+					Number.parseInt(isoDateMatch[3], 10),
+				),
+			);
+		}
+
+		const timestamp = Date.parse(dateText);
+		if (!Number.isNaN(timestamp)) {
+			return new Date(timestamp);
+		}
+
+		// eslint-disable-next-line unicorn/no-null
+		return null;
+	}
+
+	function getDisplayedWeekDate(dateRangeLabel) {
+		for (const total of document.querySelectorAll(
+			'.time-hub-task-table-header-cell__total-time-tracked[data-test^="daily-summary-"]',
+		)) {
+			const dateText = total.dataset.test?.replace('daily-summary-', '') ?? '';
+			const date = parseClickUpDate(dateText);
+			if (date) {
+				return date;
+			}
+		}
+
+		const visibleDateMatch = /([A-Za-z]{3,9})\s+(\d{1,2})/.exec(
+			dateRangeLabel.textContent ?? '',
+		);
+		if (visibleDateMatch) {
+			const visibleDate = parseClickUpDate(
+				`${visibleDateMatch[1]} ${visibleDateMatch[2]}, ${new Date().getFullYear()}`,
+			);
+			if (visibleDate) {
+				return visibleDate;
+			}
+		}
+
+		for (const dayTitle of document.querySelectorAll(
+			'.time-hub-task-table-header-cell__title',
+		)) {
+			const visibleDate = `${dayTitle.textContent ?? ''} ${new Date().getFullYear()}`;
+			const date = parseClickUpDate(visibleDate);
+			if (date) {
+				return date;
+			}
+		}
+
+		// eslint-disable-next-line unicorn/no-null
+		return null;
+	}
+
+	function getIsoWeekNumber(date) {
+		const thursday = new Date(date);
+		const day = thursday.getUTCDay() || 7;
+		thursday.setUTCDate(thursday.getUTCDate() + 4 - day);
+
+		const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+		return Math.ceil((thursday - yearStart + 86_400_000) / 604_800_000);
+	}
+
+	function findDateRangeLabel() {
+		return document.querySelector('.time-hub-toolbar__date-range-text');
+	}
+
+	function updateWeekNumber() {
+		const dateRangeLabel = findDateRangeLabel();
+		if (!dateRangeLabel) {
+			return;
+		}
+
+		const date = getDisplayedWeekDate(dateRangeLabel);
+		if (!date) {
+			return;
+		}
+
+		let weekNumber = dateRangeLabel.querySelector(`#${WEEK_NUMBER_ID}`);
+		if (!weekNumber) {
+			weekNumber = document.createElement('span');
+			weekNumber.id = WEEK_NUMBER_ID;
+		}
+
+		if (weekNumber.parentElement !== dateRangeLabel) {
+			weekNumber.style.marginLeft = '4px';
+			const chevron = dateRangeLabel.querySelector('cu3-icon');
+			if (chevron) {
+				chevron.before(weekNumber);
+			} else {
+				dateRangeLabel.append(weekNumber);
+			}
+		}
+
+		const text = `(week ${getIsoWeekNumber(date)})`;
+		if (weekNumber.textContent !== text) {
+			weekNumber.textContent = text;
+		}
 	}
 
 	/**
@@ -120,8 +245,14 @@
 			}
 
 			const totalMinutes = parseTimeTextToMinutes(totalText);
-			headerCell.classList.toggle(HIGHLIGHT_CLASS, totalMinutes === TARGET_DAILY_TOTAL_MINUTES);
-			headerCell.classList.toggle(OVER_LIMIT_CLASS, totalMinutes > TARGET_DAILY_TOTAL_MINUTES);
+			headerCell.classList.toggle(
+				HIGHLIGHT_CLASS,
+				totalMinutes === TARGET_DAILY_TOTAL_MINUTES,
+			);
+			headerCell.classList.toggle(
+				OVER_LIMIT_CLASS,
+				totalMinutes > TARGET_DAILY_TOTAL_MINUTES,
+			);
 		}
 	}
 
@@ -205,10 +336,28 @@
 			for (const mutation of mutations) {
 				if (mutationMayAffectDayTotals(mutation)) {
 					scheduleDayHeaderHighlights();
+					scheduleWeekNumber();
+				}
+
+				if (mutationMayAffectWeekNumber(mutation)) {
+					scheduleWeekNumber();
 				}
 
 				for (const node of mutation.addedNodes) {
 					if (node.nodeType === Node.ELEMENT_NODE) {
+						if (
+							node.matches?.('cu-time-hub-date-navigation') ||
+							node.querySelector?.('cu-time-hub-date-navigation') ||
+							node.matches?.('.time-hub-toolbar__date-range-text') ||
+							node.querySelector?.('.time-hub-toolbar__date-range-text') ||
+							node.matches?.(TIME_TABLE_SELECTOR) ||
+							node.querySelector?.(
+								'.time-hub-task-table-header-cell__total-time-tracked[data-test^="daily-summary-"]',
+							)
+						) {
+							scheduleWeekNumber();
+						}
+
 						// Check if the added node is an input
 						if (node.tagName === 'INPUT' && isTimeInputField(node)) {
 							attachListener(node);
@@ -534,6 +683,7 @@
 			injectHighlightStyles();
 			injectContextMenuStyles();
 			processExistingInputs();
+			updateWeekNumber();
 			observeDOM();
 			setupGlobalHandler();
 			setupWeekArrowShortcuts();
@@ -543,11 +693,12 @@
 		injectHighlightStyles();
 		injectContextMenuStyles();
 		processExistingInputs();
+		updateWeekNumber();
 		observeDOM();
 		setupGlobalHandler();
 		setupWeekArrowShortcuts();
 		setupTaskRowContextMenu();
 	}
 
-	console.log('ClickUp Timesheet userscript loaded (v1.3)');
+	console.log('ClickUp Timesheet userscript loaded');
 })();
