@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ClickUp Timesheet Comma to Period
 // @namespace    https://kiona.clickup.com
-// @version      1.4
+// @version      1.5
 // @description  Comma to period in time inputs, week numbers, day total highlights, arrow keys for week nav, and right-click task menu on timesheet
 // @author       You
 // @match        https://kiona.clickup.com/*/time*
@@ -93,16 +93,6 @@
 	}
 
 	function getDisplayedWeekDate(dateRangeLabel) {
-		for (const total of document.querySelectorAll(
-			'.time-hub-task-table-header-cell__total-time-tracked[data-test^="daily-summary-"]',
-		)) {
-			const dateText = total.dataset.test?.replace('daily-summary-', '') ?? '';
-			const date = parseClickUpDate(dateText);
-			if (date) {
-				return date;
-			}
-		}
-
 		const visibleDateMatch = /([A-Za-z]{3,9})\s+(\d{1,2})/.exec(
 			dateRangeLabel.textContent ?? '',
 		);
@@ -112,6 +102,16 @@
 			);
 			if (visibleDate) {
 				return visibleDate;
+			}
+		}
+
+		for (const total of document.querySelectorAll(
+			'.time-hub-task-table-header-cell__total-time-tracked[data-test^="daily-summary-"]',
+		)) {
+			const dateText = total.dataset.test?.replace('daily-summary-', '') ?? '';
+			const date = parseClickUpDate(dateText);
+			if (date) {
+				return date;
 			}
 		}
 
