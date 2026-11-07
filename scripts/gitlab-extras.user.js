@@ -170,6 +170,14 @@ style.textContent = `
 		color: var(--green-600, #108548);
 		background-color: var(--green-50, #ecf4ee);
 	}
+	.gitlab-extras-stage-search-empty[hidden] {
+		display: none;
+	}
+	.gitlab-extras-stage-search-empty {
+		padding: 8px 16px;
+		color: var(--gray-500, #737278);
+		font-size: 14px;
+	}
 `;
 document.head.append(style);
 
@@ -428,6 +436,152 @@ mrObserver.observe(document.body, {
 if (isOnMergeRequestsPage()) {
 	updateMergeRequestList();
 }
+
+// Always show a search input in pipeline stage dropdowns.
+// GitLab only shows its own search when a stage has more than 12 jobs
+const stageDropdownSelector = '[data-testid="pipeline-mini-graph-dropdown"]';
+const stageSearchClass = 'gitlab-extras-stage-search';
+
+function createSearchIcon() {
+	const svg = createSvgElement('svg', {
+		'aria-hidden': 'true',
+		class: 'gl-search-box-by-type-search-icon gl-icon s16',
+		fill: 'currentColor',
+		height: '16',
+		viewBox: '0 0 16 16',
+		width: '16',
+	});
+	const path = createSvgElement('path', {
+		d: 'M10.68 11.74a6 6 0 1 1 1.06-1.06l3.04 3.04a.75.75 0 1 1-1.06 1.06l-3.04-3.04ZM11.5 7a4.5 4.5 0 1 0-9 0 4.5 4.5 0 0 0 9 0Z',
+	});
+
+	svg.append(path);
+	return svg;
+}
+
+function filterStageJobs(dropdown, query) {
+	const jobList = dropdown.querySelector(
+		'[data-testid="pipeline-mini-graph-dropdown-menu-list"]',
+	);
+	if (!jobList) return;
+
+	const normalizedQuery = query.trim().toLowerCase();
+	const jobItems = [...jobList.querySelectorAll('[data-testid="ci-job-item"]')];
+
+	for (const jobItem of jobItems) {
+		const jobName =
+			jobItem.querySelector('[data-testid="job-name"]')?.textContent ??
+			jobItem.textContent;
+		const isMatch = jobName.toLowerCase().includes(normalizedQuery);
+		jobItem.style.display = isMatch ? '' : 'none';
+	}
+
+	// Hide group headers like "Failed jobs" when none of their jobs match
+	for (const group of jobList.querySelectorAll(
+		'[data-testid="failed-jobs"], [data-testid="passed-jobs"]',
+	)) {
+		const hasVisibleJobs = [
+			...group.querySelectorAll('[data-testid="ci-job-item"]'),
+		].some(jobItem => jobItem.style.display !== 'none');
+		group.style.display = hasVisibleJobs ? '' : 'none';
+	}
+
+	const emptyMessage = dropdown.querySelector(
+		'.gitlab-extras-stage-search-empty',
+	);
+	if (emptyMessage) {
+		const hasVisibleJobs = jobItems.some(
+			jobItem => jobItem.style.display !== 'none',
+		);
+		emptyMessage.hidden = hasVisibleJobs || jobItems.length === 0;
+	}
+}
+
+function createStageSearch(dropdown) {
+	const container = document.createElement('div');
+	container.className = stageSearchClass;
+
+	const wrapper = document.createElement('div');
+	wrapper.className = 'gl-search-box-by-type';
+
+	const emptyMessage = document.createElement('div');
+	emptyMessage.className = 'gitlab-extras-stage-search-empty';
+	emptyMessage.textContent = 'No results found';
+	emptyMessage.hidden = true;
+
+	const input = document.createElement('input');
+	input.type = 'search';
+	input.className =
+		'gl-form-input form-control gl-search-box-by-type-input-borderless';
+	input.placeholder = 'Search';
+	input.setAttribute('aria-label', 'Search jobs');
+	input.addEventListener('input', () => {
+		filterStageJobs(dropdown, input.value);
+	});
+
+	wrapper.append(createSearchIcon(), input);
+	container.append(wrapper, emptyMessage);
+	return container;
+}
+
+function setupStageDropdownSearch() {
+	for (const dropdown of document.querySelectorAll(stageDropdownSelector)) {
+		const title = dropdown.querySelector(
+			'[data-testid="pipeline-stage-dropdown-menu-title"]',
+		);
+		if (!title) continue;
+
+		const customSearch = dropdown.querySelector(`.${stageSearchClass}`);
+		const hasNativeSearch = dropdown.querySelector(
+			'.pipeline-mini-graph-search',
+		);
+
+		if (hasNativeSearch) {
+			if (customSearch) {
+				customSearch.remove();
+				filterStageJobs(dropdown, '');
+			}
+			continue;
+		}
+
+		if (customSearch) {
+			// Reapply the filter when GitLab re-renders the job list
+			filterStageJobs(dropdown, customSearch.querySelector('input').value);
+			continue;
+		}
+
+		title.after(createStageSearch(dropdown));
+	}
+}
+
+// Clear the search when a stage dropdown is opened, like GitLab does for its own search
+document.addEventListener(
+	'click',
+	event => {
+		const toggle = event.target.closest(
+			'[data-testid="pipeline-mini-graph-dropdown-toggle"]',
+		);
+		const searchInput = toggle
+			?.closest(stageDropdownSelector)
+			?.querySelector(`.${stageSearchClass} input`);
+		if (!searchInput) return;
+
+		searchInput.value = '';
+		filterStageJobs(toggle.closest(stageDropdownSelector), '');
+	},
+	true,
+);
+
+const stageDropdownObserver = new MutationObserver(() => {
+	setupStageDropdownSearch();
+});
+
+stageDropdownObserver.observe(document.body, {
+	childList: true,
+	subtree: true,
+});
+
+setupStageDropdownSearch();
 
 document.addEventListener('keydown', event => {
 	console.log('key down', event.key);
