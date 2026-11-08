@@ -1,4 +1,5 @@
 /* global Bun */
+import process from 'node:process';
 import {runInNewContext} from 'node:vm';
 import {expect, test} from 'bun:test';
 
@@ -43,4 +44,21 @@ test('uses the visible range when the previous week remains in the DOM', () => {
 
 	expect(displayedDate.toISOString()).toBe('2026-09-28T00:00:00.000Z');
 	expect(getIsoWeekNumber(displayedDate)).toBe(40);
+});
+
+test('uses the visible range in timezones ahead of UTC', () => {
+	const originalTimezone = process.env.TZ;
+	process.env.TZ = 'Europe/Oslo';
+
+	try {
+		const {getDisplayedWeekDate, getIsoWeekNumber} = loadWeekNumberFunctions();
+		const displayedDate = getDisplayedWeekDate({
+			textContent: 'Nov 2 - Nov 8',
+		});
+
+		expect(displayedDate.toISOString()).toBe('2026-11-02T00:00:00.000Z');
+		expect(getIsoWeekNumber(displayedDate)).toBe(45);
+	} finally {
+		process.env.TZ = originalTimezone;
+	}
 });

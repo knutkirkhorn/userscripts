@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ClickUp Timesheet Comma to Period
 // @namespace    https://kiona.clickup.com
-// @version      1.6
+// @version      1.7
 // @description  Comma to period in time inputs, week numbers, day total highlights, arrow keys for week nav, and right-click task menu on timesheet
 // @author       You
 // @match        https://kiona.clickup.com/*/time*
@@ -85,7 +85,15 @@
 
 		const timestamp = Date.parse(dateText);
 		if (!Number.isNaN(timestamp)) {
-			return new Date(timestamp);
+			// Date.parse gives local midnight, but week math uses UTC fields
+			const localDate = new Date(timestamp);
+			return new Date(
+				Date.UTC(
+					localDate.getFullYear(),
+					localDate.getMonth(),
+					localDate.getDate(),
+				),
+			);
 		}
 
 		// eslint-disable-next-line unicorn/no-null
