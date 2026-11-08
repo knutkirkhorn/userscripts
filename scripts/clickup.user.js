@@ -1,10 +1,9 @@
 // ==UserScript==
-// @name         ClickUp Timesheet Comma to Period
+// @name         ClickUp extras
 // @namespace    https://kiona.clickup.com
 // @version      1.7
 // @description  Comma to period in time inputs, week numbers, day total highlights, arrow keys for week nav, and right-click task menu on timesheet
 // @author       You
-// @match        https://kiona.clickup.com/*/time*
 // @match        https://*.clickup.com/*/time*
 // @grant        none
 // ==/UserScript==
@@ -305,7 +304,7 @@
 	 * Swap typed commas for periods before ClickUp can reject the comma keystroke
 	 */
 	function setupCommaKeyHandler() {
-		window.addEventListener(
+		globalThis.addEventListener(
 			'keydown',
 			event => {
 				if (
