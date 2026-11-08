@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ClickUp Timesheet Comma to Period
 // @namespace    https://kiona.clickup.com
-// @version      1.5
+// @version      1.6
 // @description  Comma to period in time inputs, week numbers, day total highlights, arrow keys for week nav, and right-click task menu on timesheet
 // @author       You
 // @match        https://kiona.clickup.com/*/time*
@@ -275,6 +275,48 @@
 			// Dispatch input event to notify ClickUp of the change
 			input.dispatchEvent(new Event('input', {bubbles: true}));
 		}
+	}
+
+	/**
+	 * Insert a period at the cursor as if typed, so ClickUp's input handling accepts it
+	 * @param {HTMLInputElement} input - The input element
+	 */
+	function insertPeriodAtCursor(input) {
+		// Fires native beforeinput/input events, which ClickUp's input mask honors
+		if (document.execCommand('insertText', false, '.')) {
+			return;
+		}
+
+		const start = input.selectionStart ?? input.value.length;
+		const end = input.selectionEnd ?? start;
+		input.setRangeText('.', start, end, 'end');
+		input.dispatchEvent(new Event('input', {bubbles: true}));
+	}
+
+	/**
+	 * Swap typed commas for periods before ClickUp can reject the comma keystroke
+	 */
+	function setupCommaKeyHandler() {
+		window.addEventListener(
+			'keydown',
+			event => {
+				if (
+					event.key !== ',' ||
+					event.ctrlKey ||
+					event.metaKey ||
+					event.altKey ||
+					event.isComposing ||
+					!isTimeInputField(event.target)
+				) {
+					return;
+				}
+
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				insertPeriodAtCursor(event.target);
+			},
+			true,
+		);
 	}
 
 	/**
@@ -686,6 +728,7 @@
 			updateWeekNumber();
 			observeDOM();
 			setupGlobalHandler();
+			setupCommaKeyHandler();
 			setupWeekArrowShortcuts();
 			setupTaskRowContextMenu();
 		});
@@ -696,6 +739,7 @@
 		updateWeekNumber();
 		observeDOM();
 		setupGlobalHandler();
+		setupCommaKeyHandler();
 		setupWeekArrowShortcuts();
 		setupTaskRowContextMenu();
 	}
