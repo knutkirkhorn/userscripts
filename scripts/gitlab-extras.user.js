@@ -583,6 +583,54 @@ stageDropdownObserver.observe(document.body, {
 
 setupStageDropdownSearch();
 
+// Always enable the "Show dependencies" toggle on pipeline pages.
+// Only done once per pipeline so it can still be turned off manually
+let showDependenciesEnabledForPath;
+
+function findShowDependenciesToggle() {
+	const toggleByTestId = document.querySelector(
+		'[data-testid="show-links-toggle"]',
+	);
+	if (toggleByTestId) {
+		return toggleByTestId.matches('button[role="switch"]')
+			? toggleByTestId
+			: toggleByTestId.querySelector('button[role="switch"]');
+	}
+
+	for (const toggle of document.querySelectorAll('button[role="switch"]')) {
+		const label =
+			toggle.closest('.gl-toggle-wrapper')?.textContent ??
+			toggle.getAttribute('aria-label') ??
+			'';
+		if (label.includes('Show dependencies')) return toggle;
+	}
+}
+
+function enableShowDependencies() {
+	const {pathname} = globalThis.location;
+	if (!/\/-\/pipelines\/\d+/.test(pathname)) return;
+	if (showDependenciesEnabledForPath === pathname) return;
+
+	const toggle = findShowDependenciesToggle();
+	if (!toggle) return;
+
+	showDependenciesEnabledForPath = pathname;
+	if (toggle.getAttribute('aria-checked') !== 'true') {
+		toggle.click();
+	}
+}
+
+const showDependenciesObserver = new MutationObserver(() => {
+	enableShowDependencies();
+});
+
+showDependenciesObserver.observe(document.body, {
+	childList: true,
+	subtree: true,
+});
+
+enableShowDependencies();
+
 document.addEventListener('keydown', event => {
 	console.log('key down', event.key);
 
