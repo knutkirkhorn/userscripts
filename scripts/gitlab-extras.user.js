@@ -681,74 +681,83 @@ document.addEventListener('keydown', event => {
 		!event.metaKey &&
 		!event.altKey
 	) {
+		// Example: "/knutakir/knuts-gitlab-restroom/-/merge_requests/12/diffs"
+		const match = globalThis.location.pathname.match(
+			/^\/(.+?)\/-\/merge_requests\/(\d+)(?:\/|$)/,
+		);
+		if (!match) return;
+
 		event.stopPropagation();
 		event.preventDefault();
 
-		// Get project path and MR IID from the current URL
-		const urlParts = globalThis.location.pathname.split('/');
-		// This consist of user/group + project/repo. Example "knutakir/knuts-gitlab-restroom"
-		const projectPath = urlParts.slice(1, -3).join('/');
-		const mergeRequestNumber = urlParts.at(-1);
+		// Held-down keys fire repeated keydown events
+		if (event.repeat || isTogglingDraftStatus) return;
 
-		// Get the current draft status from the page.
-		// Currently just checks if the "Mark as ready" button is present.
-		// TODO: improve this check
-		const isDraft =
-			document.querySelector('button[data-testid="mark-as-ready-button"]') !==
-			null;
-
-		// Show loader overlay with context-specific text
-		showLoader(isDraft ? 'Marking as ready...' : 'Marking as draft...');
-
-		// Get the CSRF token from the meta tag
-		const token = document
-			.querySelector('meta[name="csrf-token"]')
-			?.getAttribute('content');
-
-		// TODO: make async?
-		fetch('https://gitlab.com/api/graphql', {
-			headers: {
-				'Content-Type': 'application/json',
-				'X-CSRF-Token': token,
-			},
-			body: JSON.stringify({
-				operationName: 'toggleDraftStatus',
-				variables: {
-					projectPath: projectPath,
-					iid: mergeRequestNumber,
-					draft: !isDraft,
-				},
-				query:
-					'mutation toggleDraftStatus($projectPath: ID!, $iid: String!, $draft: Boolean!) {  mergeRequestSetDraft(    input: {projectPath: $projectPath, iid: $iid, draft: $draft}  ) {    mergeRequest {      id      mergeableDiscussionsState      title      draft      __typename    }    errors    __typename  }}',
-			}),
-			method: 'POST',
-			mode: 'cors',
-		})
-			.then(response => response.json())
-			.then(data => {
-				console.log('data', data);
-
-				if (data.errors) {
-					console.error(
-						'Error toggling draft status (data.errors):',
-						data.errors,
-					);
-					hideLoader();
-				} else if (data.data.errors) {
-					console.error(
-						'Error toggling draft status (data.data.errors):',
-						data.data.errors,
-					);
-					hideLoader();
-				} else {
-					// TODO: Is it possible to do this without refreshing?
-					// Refresh the page to show updated status
-					globalThis.location.reload();
-				}
-			})
-			.catch(error => {
-				console.error('Error toggling draft status:', error);
-				hideLoader();
-			});
+		const [, projectPath, mergeRequestNumber] = match;
+		toggleDraftStatus(projectPath, mergeRequestNumber);
 	}
 });
+
+let isTogglingDraftStatus = false;
+
+async function gitlabGraphql(operationName, query, variables) {
+	const token = document
+		.querySelector('meta[name="csrf-token"]')
+		?.getAttribute('content');
+
+	const response = await fetch('https://gitlab.com/api/graphql', {
+		headers: {
+			'Content-Type': 'application/json',
+			'X-CSRF-Token': token,
+		},
+		body: JSON.stringify({operationName, variables, query}),
+		method: 'POST',
+		mode: 'cors',
+	});
+	const data = await response.json();
+
+	if (data.errors) {
+		throw new Error(JSON.stringify(data.errors));
+	}
+
+	return data.data;
+}
+
+async function toggleDraftStatus(projectPath, mergeRequestNumber) {
+	isTogglingDraftStatus = true;
+	showLoader('Toggling draft status...');
+
+	try {
+		// Read the draft status from the API, as the page may not have rendered the status buttons yet
+		const statusData = await gitlabGraphql(
+			'getDraftStatus',
+			'query getDraftStatus($projectPath: ID!, $iid: String!) { project(fullPath: $projectPath) { mergeRequest(iid: $iid) { draft } } }',
+			{projectPath, iid: mergeRequestNumber},
+		);
+		const isDraft = statusData.project?.mergeRequest?.draft;
+		if (typeof isDraft !== 'boolean') {
+			throw new TypeError('Could not determine current draft status');
+		}
+
+		hideLoader();
+		showLoader(isDraft ? 'Marking as ready...' : 'Marking as draft...');
+
+		const toggleData = await gitlabGraphql(
+			'toggleDraftStatus',
+			'mutation toggleDraftStatus($projectPath: ID!, $iid: String!, $draft: Boolean!) { mergeRequestSetDraft(input: {projectPath: $projectPath, iid: $iid, draft: $draft}) { mergeRequest { id draft } errors } }',
+			{projectPath, iid: mergeRequestNumber, draft: !isDraft},
+		);
+		const errors = toggleData.mergeRequestSetDraft?.errors;
+		if (errors?.length > 0) {
+			throw new Error(JSON.stringify(errors));
+		}
+
+		// TODO: Is it possible to do this without refreshing?
+		// Keep the toggle lock and loader until the page reloads to avoid double toggles
+		globalThis.location.reload();
+	} catch (error) {
+		console.error('Error toggling draft status:', error);
+		hideLoader();
+		isTogglingDraftStatus = false;
+	}
+}
