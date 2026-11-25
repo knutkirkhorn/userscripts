@@ -690,11 +690,16 @@ function parseConventionalCommit(title) {
 	);
 }
 
-function getFirstTextNode(element) {
+// GitLab treats these title prefixes as draft markers
+const draftPrefixRegex = /^(?:draft:|\[draft\]|\(draft\))\s*/i;
+const conventionalTitlePartsSelector =
+	'.gitlab-extras-commit-draft, .gitlab-extras-commit-type, .gitlab-extras-commit-scope';
+
+function getFirstTitleTextNode(element) {
 	const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
 		acceptNode: node =>
 			node.textContent.trim() &&
-			!node.parentElement.closest('.gitlab-extras-commit-scope')
+			!node.parentElement.closest(conventionalTitlePartsSelector)
 				? NodeFilter.FILTER_ACCEPT
 				: NodeFilter.FILTER_SKIP,
 	});
@@ -724,44 +729,51 @@ function createCommitScope(scope) {
 	return scopeElement;
 }
 
+function renderConventionalTitle(titleLink) {
+	const textNode = getFirstTitleTextNode(titleLink);
+	if (!textNode) return;
+
+	// The rendered title can itself look like a conventional commit, e.g. "ci: ..."
+	if (textNode.textContent === titleLink.dataset.gitlabExtrasCommitTitle) {
+		return;
+	}
+
+	const fullTitle = textNode.textContent.trimStart();
+	const draftPrefix = draftPrefixRegex.exec(fullTitle)?.[0];
+	const commit = parseConventionalCommit(
+		fullTitle.slice(draftPrefix?.length ?? 0),
+	);
+	if (!commit) return;
+
+	for (const element of titleLink.querySelectorAll(
+		conventionalTitlePartsSelector,
+	)) {
+		element.remove();
+	}
+
+	textNode.textContent = commit.description;
+	titleLink.dataset.gitlabExtrasCommitTitle = textNode.textContent;
+
+	const titleParts = [createCommitTypeBadge(commit)];
+	if (draftPrefix) {
+		const draftElement = document.createElement('span');
+		draftElement.className = 'gitlab-extras-commit-draft';
+		draftElement.textContent = draftPrefix;
+		titleParts.unshift(draftElement);
+	}
+
+	if (commit.scope) {
+		titleParts.push(createCommitScope(commit.scope));
+	}
+
+	textNode.before(...titleParts);
+}
+
 function renderConventionalCommits() {
-	for (const commitLink of document.querySelectorAll('a[href*="/-/commit/"]')) {
-		const textNode = getFirstTextNode(commitLink);
-		if (!textNode) continue;
-
-		// The rendered title can itself look like a conventional commit, e.g. "ci: ..."
-		if (textNode.textContent === commitLink.dataset.gitlabExtrasCommitTitle) {
-			continue;
-		}
-
-		// Only handle links where the commit title is the start of the link text
-		const existingScope = commitLink.querySelector(
-			'.gitlab-extras-commit-scope',
-		);
-		let leadingText = commitLink.textContent.trimStart();
-		if (existingScope && leadingText.startsWith(existingScope.textContent)) {
-			leadingText = leadingText.slice(existingScope.textContent.length);
-		}
-
-		const title = textNode.textContent.trimStart();
-		if (!leadingText.startsWith(title)) continue;
-
-		const commit = parseConventionalCommit(title);
-		if (!commit) continue;
-
-		existingScope?.remove();
-		textNode.textContent = commit.description;
-		commitLink.dataset.gitlabExtrasCommitTitle = textNode.textContent;
-		if (commit.scope) {
-			textNode.before(createCommitScope(commit.scope));
-		}
-
-		const previousElement = commitLink.previousElementSibling;
-		if (previousElement?.classList.contains('gitlab-extras-commit-type')) {
-			previousElement.replaceWith(createCommitTypeBadge(commit));
-		} else {
-			commitLink.before(createCommitTypeBadge(commit));
-		}
+	for (const titleLink of document.querySelectorAll(
+		'a[href*="/-/commit/"], a.issue-title-text[href*="/-/merge_requests/"]',
+	)) {
+		renderConventionalTitle(titleLink);
 	}
 }
 
