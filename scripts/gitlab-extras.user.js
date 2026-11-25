@@ -178,6 +178,31 @@ style.textContent = `
 		color: var(--gray-500, #737278);
 		font-size: 14px;
 	}
+	.gitlab-extras-commit-type {
+		display: inline-block;
+		margin-right: 6px;
+		padding: 0 7px;
+		border: 1px solid
+			color-mix(in srgb, var(--gitlab-extras-commit-type-color) 45%, transparent);
+		border-radius: 999px;
+		background-color: color-mix(
+			in srgb,
+			var(--gitlab-extras-commit-type-color) 15%,
+			transparent
+		);
+		color: color-mix(in srgb, var(--gitlab-extras-commit-type-color) 70%, black);
+		font-size: 12px;
+		font-weight: 500;
+		line-height: 18px;
+		vertical-align: 1px;
+		white-space: nowrap;
+	}
+	html.gl-dark .gitlab-extras-commit-type {
+		color: color-mix(in srgb, var(--gitlab-extras-commit-type-color) 75%, white);
+	}
+	.gitlab-extras-commit-scope {
+		color: var(--gl-text-color-subtle, #737278);
+	}
 `;
 document.head.append(style);
 
@@ -630,6 +655,127 @@ showDependenciesObserver.observe(document.body, {
 });
 
 enableShowDependencies();
+
+// Render conventional commit titles like Refined GitHub does.
+// Example: "chore(ci): use production environments" becomes "[Chore] ci: use production environments"
+const conventionalCommitTypes = new Map([
+	['feat', {label: 'Feature', color: '#1fb6c9'}],
+	['fix', {label: 'Fix', color: '#e5534b'}],
+	['perf', {label: 'Performance', color: '#a371f7'}],
+	['refactor', {label: 'Refactor', color: '#8b7cf6'}],
+	['revert', {label: 'Revert', color: '#f0883e'}],
+	['docs', {label: 'Docs', color: '#4493f8'}],
+	['chore', {label: 'Chore', color: '#8b949e'}],
+	['build', {label: 'Build', color: '#d29922'}],
+	['ci', {label: 'CI', color: '#3fb950'}],
+	['test', {label: 'Test', color: '#e3b341'}],
+	['style', {label: 'Style', color: '#db61a2'}],
+]);
+const breakingChangeColor = '#f85149';
+
+const conventionalCommitRegex =
+	/^(?<type>\w+)(?:\((?<scope>[^)]+)\))?(?<breaking>!)?:\s+(?<description>\S.*)$/s;
+
+function parseConventionalCommit(title) {
+	const groups = conventionalCommitRegex.exec(title)?.groups;
+	const commitType = conventionalCommitTypes.get(groups?.type.toLowerCase());
+
+	return (
+		commitType && {
+			...commitType,
+			scope: groups.scope,
+			isBreaking: Boolean(groups.breaking),
+			description: groups.description,
+		}
+	);
+}
+
+function getFirstTextNode(element) {
+	const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+		acceptNode: node =>
+			node.textContent.trim() &&
+			!node.parentElement.closest('.gitlab-extras-commit-scope')
+				? NodeFilter.FILTER_ACCEPT
+				: NodeFilter.FILTER_SKIP,
+	});
+	return walker.nextNode();
+}
+
+function createCommitTypeBadge({label, color, isBreaking}) {
+	const badge = document.createElement('span');
+	badge.className = 'gitlab-extras-commit-type';
+	badge.style.setProperty(
+		'--gitlab-extras-commit-type-color',
+		isBreaking ? breakingChangeColor : color,
+	);
+	badge.textContent = isBreaking ? `${label}!` : label;
+
+	if (isBreaking) {
+		badge.title = 'Breaking change';
+	}
+
+	return badge;
+}
+
+function createCommitScope(scope) {
+	const scopeElement = document.createElement('span');
+	scopeElement.className = 'gitlab-extras-commit-scope';
+	scopeElement.textContent = `${scope}: `;
+	return scopeElement;
+}
+
+function renderConventionalCommits() {
+	for (const commitLink of document.querySelectorAll('a[href*="/-/commit/"]')) {
+		const textNode = getFirstTextNode(commitLink);
+		if (!textNode) continue;
+
+		// The rendered title can itself look like a conventional commit, e.g. "ci: ..."
+		if (textNode.textContent === commitLink.dataset.gitlabExtrasCommitTitle) {
+			continue;
+		}
+
+		// Only handle links where the commit title is the start of the link text
+		const existingScope = commitLink.querySelector(
+			'.gitlab-extras-commit-scope',
+		);
+		let leadingText = commitLink.textContent.trimStart();
+		if (existingScope && leadingText.startsWith(existingScope.textContent)) {
+			leadingText = leadingText.slice(existingScope.textContent.length);
+		}
+
+		const title = textNode.textContent.trimStart();
+		if (!leadingText.startsWith(title)) continue;
+
+		const commit = parseConventionalCommit(title);
+		if (!commit) continue;
+
+		existingScope?.remove();
+		textNode.textContent = commit.description;
+		commitLink.dataset.gitlabExtrasCommitTitle = textNode.textContent;
+		if (commit.scope) {
+			textNode.before(createCommitScope(commit.scope));
+		}
+
+		const previousElement = commitLink.previousElementSibling;
+		if (previousElement?.classList.contains('gitlab-extras-commit-type')) {
+			previousElement.replaceWith(createCommitTypeBadge(commit));
+		} else {
+			commitLink.before(createCommitTypeBadge(commit));
+		}
+	}
+}
+
+const conventionalCommitsObserver = new MutationObserver(() => {
+	renderConventionalCommits();
+});
+
+conventionalCommitsObserver.observe(document.body, {
+	childList: true,
+	subtree: true,
+	characterData: true,
+});
+
+renderConventionalCommits();
 
 document.addEventListener('keydown', event => {
 	console.log('key down', event.key);
