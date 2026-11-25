@@ -197,6 +197,13 @@ style.textContent = `
 		vertical-align: 1px;
 		white-space: nowrap;
 	}
+	h1 .gitlab-extras-commit-type {
+		margin-right: 10px;
+		padding: 2px 12px;
+		font-size: 0.55em;
+		line-height: 1.4;
+		vertical-align: 0.2em;
+	}
 	html.gl-dark .gitlab-extras-commit-type {
 		color: color-mix(in srgb, var(--gitlab-extras-commit-type-color) 75%, white);
 	}
@@ -771,7 +778,12 @@ function renderConventionalTitle(titleLink) {
 
 function renderConventionalCommits() {
 	for (const titleLink of document.querySelectorAll(
-		'a[href*="/-/commit/"], a.issue-title-text[href*="/-/merge_requests/"]',
+		[
+			'a[href*="/-/commit/"]',
+			'a.issue-title-text[href*="/-/merge_requests/"]',
+			'h1[data-testid="title-content"]',
+			'a[data-testid="sticky-header-title"]',
+		].join(', '),
 	)) {
 		renderConventionalTitle(titleLink);
 	}
