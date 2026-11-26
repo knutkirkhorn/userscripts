@@ -780,6 +780,7 @@ function renderConventionalCommits() {
 	for (const titleLink of document.querySelectorAll(
 		[
 			'a[href*="/-/commit/"]',
+			'a.commit-row-message.item-title',
 			'a.issue-title-text[href*="/-/merge_requests/"]',
 			'h1[data-testid="title-content"]',
 			'a[data-testid="sticky-header-title"]',
